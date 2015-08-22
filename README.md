@@ -1,5 +1,5 @@
 # socketmachine.c
-Old (~2007) fun project implementing sync-looking stackless async code using continuation passing. The implementation (ab)uses (GC)C macros and computed gotos, in the spirit of [Duff's device][duff].
+Old (~2007) fun project implementing sync-looking libev async code using continuation passing. The implementation (ab)uses (GC)C macros and computed gotos, in the spirit of [Duff's device][duff].
 
 See [the SM_CALL implementation][call] and [how it is used][use]:
 
