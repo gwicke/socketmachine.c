@@ -1,0 +1,62 @@
+== Memory management ==
+* threads allocated with malloc; include obstack
+* stuff in thread allocated from obstack
+* stack freed on thread return
+
+
+
+schedule(op, args)
+	to another process:
+		obstack_alloc op, write to socket/enqueue if socket full
+	to local thread
+		obstack_alloc thread, obstack_alloc op from new obstack
+
+struct thread *t = new_thread();
+evio_schedule(t, evio_read, 100)
+
+
+
+== Schedule new thread in process ==
+
+op | link(conti) | threadstate(for ident) | args
+fds in control message
+
+malloc new thread
+obstack_alloc args, memcpy from pipe, backpatch fds if necessary
+
+== answer, when done ==
+op | link | threadstate | status 
+result in data
+
+== intermediate request, e.g. data ==
+same op/args proto as above?
+bulk data via pipe?
+
+spawn(fun, args)
+spawn_root(fun, args)
+
+
+== Global namespace ==
+* name in judy array, pointer to type struct
+* type attribute: index to op table
+
+
+
+=== Use cases for globals ===
+* write serialization: index file, diffs, connections (notifications)
+* access to 'server processes': pass something to inbox, server loops over it
+** passed data must describe op requested: ref field? in_ret?
+* subscribe to changes: index file rewrite (to open the new file)
+
+/* entry to MVCC-controlled data structures */
+struct op *o = get_path("/..../something");
+/* operate on o */
+
+=== server processes ===
+* fileserver: cache remote objects, hand out fds to local files, asks syncer
+  for monitoring
+* router: look up location of objects: central cache, needs node table
+* syncer: keeps contact with other nodes, starts importer threads, notifies
+  fileserver if change stream stops (cache stale)
+* distributor: send out data to subscribers (diffs, broadcasts), manage
+  subscription state

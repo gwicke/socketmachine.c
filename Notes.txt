@@ -1,0 +1,191 @@
+* ContinuOS.org oder continuix.org
+* global namespace: /proc etc, 
+* local part: /..../ (explicitly), contains local-only + local parts of global
+  for procs: get info from state, calc prefix, re-search with prefix
+* process state represented
+* process snapshots
+* remote calls handled transparently
+
+
+== Judy ==
+http://judy.sourceforge.net/doc/JudySL_3x.htm
+
+== Index format ==
+=== use cases ===
+* get url: direct io, filtering on headers
+* filter on url list: intersect list of urls with header
+
+on-disk array of entry pointers
+    updated on change, pointed to by Judy array w. urls
+
+
+entrylen | next
+statdata
+len | uri
+len | Key: val
+len | Kval # encoded key, non-ascii
+len | ff | pointer
+0000
+
+entryptr
+nextptr
+key | off
+key | off
+... (encoded)
+XXXX0000
+
+
+=== per key: list of locations ===
+bytelen
+added
+keylen | canonkey
+delta-coded varint | varint ... with full addrs in fixed offsets
+added negative to remove
+appended, sorted on thresh: tmp Judy1 array
+
+
+=== Request ===
+2next | key: val | 00
+2next | key: val | 00
+2next | FF | pointer
+
+== spreading work ==
+primary: pipe w. fixed records:
+    offset to shm, op
+== Support for compiler without computed goto ==
+maintain a switch stack, define switch to use it
+needs two stacks (or needs to keep track of nesting)
+
+
+== Channels and communication ==
+* spawn returns process pointer (continuation), is available locally at
+  /..../proc/<hexpointer>
+* can be mounted to some name: mount(pointer, "/proc/name");
+  this sets flag (mounted) and inserts pointer in local namespace (forward and
+  backward)
+* on process quit, remove self from local namespace if mounted flag set
+* typed send: globally defined, common message part, defined initializers for
+  type checking
+* central type registry. Compound types/ASN.1? RDF?
+* on receive: if exp matches, return m, else enqueue
+
+children - cancel with quit, just pointers to contis
+subscriptions - cancel with unsubscribe, pointers to contis
+outbox - outstanding sends, cancel request if not yet replied, pointers to
+	messages
+watchers
+	timer: one per thread, set to call back whoever set it last
+		timeout_reset()
+		timeout_cancel()
+	fd: block(fd, what, timeout)
+
+	additional: spawn as child thread (or as root)
+
+
+tid = spawn(fun, arg1, arg2)
+tid = spawn_root(fun, arg1, arg2)
+
+int send(tid, message *m)			// returns 0/1, appends m to outbox
+int send_path("/proc/xy", message *m)		// resolves path, sends to tid, returns 0/1
+
+struct message * call(tid, message *m)		// returns 'reply': matches on ref
+struct message * call_path("/proc/xy", message *m) // resolve, call
+
+struct message * receive();			// any: macro voodoo -> 1
+struct message * receive(spec);			// only matching spec
+
+struct message {
+	unsigned int op; 	// switched on at receiver
+	struct conti *link;	// callback or caller, depending on op
+	struct message *ref;	// pointer to initial message in replies, to
+				// separate replies from same process
+
+	unsigned int argtype x;	// for run-time checking, serialization
+	void *arg;		// size + buffer, len + array etc
+}
+
+struct message *m = new_message(op, buf);
+send(tid, m);
+
+
+while(m = receive()) {
+	switch(m->op) {
+		case stdin:
+			// process buffer
+			break;
+		case stdout:
+			// set callback to stdout
+			break;
+		case return:
+			// subthread returned something to parent
+			break;
+		case quit:
+			goto out;
+		default:
+			// describe self?
+	}
+}
+
+
+
+=== http pipeline ===
+int senders = 0;
+int receivers = 1;
+struct conti *receiver;
+struct conti *sender = NULL;
+struct message *m, *receiver_m;
+receiver = spawn(handle_request, fd, etc);
+while(m = receive()) {
+	switch(m->op) {
+	case timeout:
+		goto out;
+	case reply:
+		if (m->link == receiver) {
+			if(senders == 0) {
+				// allow handler to continue
+				sender = receiver;
+				send(sender, continue_message());
+				// send off another handler
+				receiver = spawn(handle_request, fd, etc);
+				senders = 1;
+			} else {
+				// have to wait for sender
+				unreceive(m);
+			}
+		} else if(m->link == sender) {
+			if (sender = receive(m->op == reply 
+				&& m->link == receiver) 
+			{
+				// was waiting, allow it to write
+				send(sender, continue_message());
+				// send off another handler
+				receiver = spawn(handle_request, fd, etc);
+				senders = 1;
+			} else {
+				senders = 0;
+				// as the sender quits, there is no need to
+				// enqueue it
+			}
+				
+		}
+		break;
+
+	/* part of default */
+	case quit:
+		goto out;
+	DEFAULT_CASE;
+
+	}
+out:
+	/* deal with local state, free malloced buffers, close fds */
+	
+	/* send quit to all children
+	** send error to all queued messages that are not replies, dealloc
+	** 	messages
+	** call back parent with quit message */
+	CO_RETURN();
+	/* dealloc self (obstack) */
+}
+
+			
+			
